@@ -4,7 +4,7 @@
 char ID = 'T';  //Identificador del dispositivo (CNTRL DE TEMPERATURA)
 char mensaje = 'N';
 int valor = 0;
-
+// xxxx
 // --- Cadena para recibir trama ----
 String tramaRecibida;
 // ==============================
