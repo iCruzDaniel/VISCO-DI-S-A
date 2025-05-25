@@ -1,1 +1,5 @@
 /HMI/Visualizer/my-venv
+/HMI/Visualizer/vistas/__pycache__
+Visualizer.spec
+build
+dist
