@@ -130,15 +130,20 @@ void loop() {
   // Lógica del control difuso si está activo
   
   if (controlActivo) {
+    int temperaturaEntera = (int)leerSensor();
     tempTruncada = leerSensor();  // Lectura real del sensor
-  
-    error = SetPoint - tempTruncada;
-  
+
+    error = (float)setPoint - tempTruncada;
+
+
     derivada = calcularDerivada(error);
     potencia = calcularPotencia(error, derivada);
     aplicarPotencia(potencia);  // Control de actuador real
+    calcularDerivada(error);
     Serial.print("Error: "); Serial.println(error);
     Serial.print("Derivada: "); Serial.println(derivada);
+
+    
   delay(500);
   }
 
@@ -194,6 +199,7 @@ float calcularDerivada(float nuevoError) {
   static float errorAnterior = 0;
   float derivada = nuevoError - errorAnterior;
   errorAnterior = nuevoError;
+  delay(200);
   return derivada;
 } 
 
@@ -205,42 +211,3 @@ void aplicarPotencia(float p) {
   Serial.print("Aplicando potencia PWM: ");
   Serial.println(salidaPWM);
 }
-
-// void leerSetPointsDesdeConsola() {
-//   Serial.println(F("Introduce el SetPoint inicial:"));
-
-//   while (!Serial.available()) {
-//     delay(10);  // Esperar entrada
-//   }
-
-//   String entrada = Serial.readStringUntil('\n');
-//   entrada.trim();  // Elimina espacios o saltos de línea
-
-//   if (!setPointInicialLeido) {
-//     setPoint = entrada.toInt();
-//     Serial.print(F("SetPoint inicial leído: "));
-//     Serial.println(setPoint);
-//     setPointInicialLeido = true;
-//     Serial.println(F("Introduce el nuevo SetPoint:"));
-
-//     while (!Serial.available()) {
-//       delay(10);  // Esperar nueva entrada
-//     }
-
-//     entrada = Serial.readStringUntil('\n');
-//     entrada.trim();
-//   }
-
-//   if (!nuevoSetPointLeido) {
-//     NsetPoint = entrada.toInt();
-//     Serial.print(F("Nuevo SetPoint leído: "));
-//     Serial.println(NsetPoint);
-//     nuevoSetPointLeido = true;
-
-//     setPoint = NsetPoint;
-//     Serial.print(F("SetPoint actualizado a: "));
-//     Serial.println(setPoint);
-//     Serial.print(F("Temperatura actual: "));
-//     Serial.println(Tlut);
-//   }
-// }
