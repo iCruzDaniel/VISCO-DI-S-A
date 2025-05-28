@@ -21,7 +21,7 @@ char keys[ROWS][COLS] = {
   { 'L', '0', 'R', 'N' }
 };
 // byte rowPins[ROWS] = { 9, 8, 7, 6, 5 };
-byte rowPins[ROWS] = { 2, 3, 4, 5, 6 };
+byte rowPins[ROWS] = { 6, 5, 4, 3, 2 };
 // byte colPins[COLS] = { 4, 3, 2, A0 };
 byte colPins[COLS] = { A0, A1, A2, A3 };
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
@@ -47,6 +47,10 @@ AppState currentState = START_SCREEN;
 char ID = 'M';  //Identificador del dispositivo (HMI Panel master)
 char respuesta = 'N';
 int valor = 0;
+
+bool init_temp = 0; //variables para establecer comunicacion entre micros (0=N0 1=Ok)
+bool init_c = 0;    //variables para establecer comunicacion entre micros (0=N0 1=Ok)
+bool inicializacion_aux = false; //saber si se ejecutó la funcion en el loop
 
 // --- Cadena para recibir trama ----
 String tramaRecibida;
@@ -108,10 +112,11 @@ void setup() {
   digitalWrite(7, 0);
   //=================
 
+
   lcd.init();
   lcd.backlight();
   Serial.begin(9600);
-
+ 
   // Inicializar inputBuffer
   inputBuffer[0] = '\0';  // Asegurar que esté vacío al inicio
   inputBufferLen = 0;
@@ -122,82 +127,108 @@ void setup() {
   if (temperatura < 0 || temperatura > 100) temperatura = 20;
   if (iteraciones < 1) iteraciones = 1;
 
-  // Serial.println(F("Inicializando tarjeta SD..."));
-  // if (!SD.begin(chipSelect)) {
-  //   Serial.println(F("Error: Fallo al inicializar la SD."));
-  //   lcd.clear();
-  //   lcd.setCursor(0, 0);
-  //   lcd.print(F("Fallo SD!"));
-  //   while (true)
-  //     ;  // Detiene el programa aquí para que veas el error
-  // }
-  // Serial.println(F("SD inicializada correctamente."));
-  // Serial.print(F("RAM libre al inicio: "));
-  // Serial.println(freeRam());
-
-
-  showStartScreen();
+   Serial.println(F("Inicializando tarjeta SD..."));
+   if (!SD.begin(chipSelect)) {
+     Serial.println(F("Error: Fallo al inicializar la SD."));
+     lcd.clear();
+     lcd.setCursor(0, 0);
+     lcd.print(F("Fallo SD!"));
+     while (true)
+       ;  // Detiene el programa aquí para que veas el error
+   }
+   Serial.println(F("SD inicializada correctamente."));
+   Serial.print(F("RAM libre al inicio: "));
+   Serial.println(freeRam());
+//   solicitud_init();
+//   if (init_temp == 1 && init_c == 1) {
+//    showStartScreen();
+//  }
+//bucle para enviar comandos hasta que los esclavos respondan
+    while (!(init_temp && init_c)) {
+  solicitud_init();
+  unsigned long t0 = millis();
+  while (millis() - t0 < 1000) {
+    procesarTramaSerial();
+  }
+}
 }
 
 
 void loop() {
   char key = keypad.getKey();
   if (key) handleKey(key);
-
+  procesarTramaSerial();
+  
   // Leer la trama completa en el Arduino
+  
+    if (init_temp && init_c && !inicializacion_aux) {
+     showStartScreen();
+    inicializacion_aux = true;
+  }
+}
+
+void solicitud_init(){ //envio para inicializar temp y caida
+   Serial.print(F("TR|"));
+   delay(500);
+   Serial.print(F("CR|"));
+   delay(500);
+}
+//void sistem_init(){
+//  Serial.print(F("TI|"));
+//   delay(500);
+//   Serial.print(F("CI|"));
+//   delay(500);
+//}
+void procesarTramaSerial() {
   if (Serial.available() > 0) {
-    delay(10);
-    tramaRecibida = Serial.readStringUntil('|');  // Leer hasta un salto de línea
+    delay(10);  // Espera breve para asegurar recepción completa
+    String tramaRecibida = Serial.readStringUntil('|');  // Leer hasta delimitador
     char esclavoID = tramaRecibida[0];
-    respuesta = tramaRecibida[1];
-    valor = 100 * (tramaRecibida[2] - '0') + 10 * (tramaRecibida[3] - '0') + (tramaRecibida[4] - '0');
+    char respuesta = tramaRecibida[1];
+    int valor = 0;
+
+    if (tramaRecibida.length() >= 5) {
+      valor = 100 * (tramaRecibida[2] - '0') +
+              10 * (tramaRecibida[3] - '0') +
+              (tramaRecibida[4] - '0');
+    }
+
+    Serial.flush();  // Limpiar buffer de entrada
 
     if (esclavoID == 'T') {
-      Serial.flush();  //Limpiar buffer de entrada
-      // Ejecutar funcion correspondiente al respuesta
       switch (respuesta) {
         case 'R':
-          // funcion
-          Serial.println("respuesta 1");
+          init_temp = true;
           break;
         case 'I':
-          // funcion
           Serial.println("respuesta 2");
+          EEPROM.put(TEMP_ADDR, valor);
           break;
         case 'S':
-          // funcion
           Serial.println("respuesta 3");
           break;
         case 'F':
-          // funcion
           Serial.println("respuesta 4");
           break;
         case 'A':
-          // funcion
-          Serial.println("respuesta 4");
-          break;
-      }
-    }
-    if (esclavoID == 'C') {
-      Serial.flush();  //Limpiar buffer de entrada
-      // Ejecutar funcion correspondiente al respuesta
-      switch (respuesta) {
-        case 'R':
-          // funcion
-          Serial.println("respuesta 1");
-          break;
-        case 'I':
-          // funcion
-          Serial.println("respuesta 2");
-          break;
-        case 'S':
-          // funcion
-          Serial.println("respuesta 3");
+          Serial.println("respuesta 5");
           break;
       }
     }
 
-    respuesta = ' ';
+    if (esclavoID == 'C') {
+      switch (respuesta) {
+        case 'R':
+          init_c = true;
+          break;
+        case 'I':
+          Serial.println("respuesta 2");
+          break;
+        case 'S':
+          Serial.println("respuesta 3");
+          break;
+      }
+    }
   }
 }
 
@@ -425,6 +456,8 @@ void handleKey(char key) {
           EEPROM.put(TEMP_ADDR, temperatura);
           currentState = CONFIG_VARS_MENU;
           showConfigVarsMenu();
+          Serial.print("TS");
+          Serial.print(temperatura);
         } else {
           lcd.setCursor(1, 3), lcd.print(F("Error: Fuera rango!"));
           delay(1500);
