@@ -48,10 +48,19 @@ char ID = 'M';  //Identificador del dispositivo (HMI Panel master)
 char respuesta = 'N';
 int valor = 0;
 
-bool init_temp = 0; //variables para establecer comunicacion entre micros (0=N0 1=Ok)
-bool init_c = 0;    //variables para establecer comunicacion entre micros (0=N0 1=Ok)
+bool sol_init_temp = 0; //variables para establecer comunicacion entre micros (0=N0 1=Ok)
+bool sol_init_c = 0;    //variables para establecer comunicacion entre micros (0=N0 1=Ok)
 bool inicializacion_aux = false; //saber si se ejecutó la funcion en el loop
+int iniciar_temp = 0; // variable auxiliar para establecer el inicio de la temperatura.
+int iniciar_caida = 0; // variable auxiliar para establecer el inicio de la temperatura.
 
+bool init_caida_com = true;
+
+//--------------  VARIABLES CONSULTA TEMPERATURA ACTUAL -------------------
+unsigned long lastRequestTime_temp = 0;
+const unsigned long intervalo_temp_act = 2000; // tiempo entre solicitudes en ms
+byte temperatura_act_EEPROM = -1; // para comparar cambios antes de escribir
+//-----------------------
 // --- Cadena para recibir trama ----
 String tramaRecibida;
 // ==============================
@@ -65,6 +74,7 @@ const int chipSelect = 10;
 
 // ===== Contantes =====
 const int TEMP_ADDR = 0;
+const int TEMP_ACT_ADDR = 2;
 const int ITER_ADDR = sizeof(byte);  // sizeof(int) a sizeof(byte)
 // ---------------------------------
 // ==============================
@@ -105,12 +115,12 @@ int freeRam() {
 
 // ===== MAIN =====
 void setup() {
-  //=================
-  pinMode(7, OUTPUT);
-  digitalWrite(7, 1);
-  delay(4000);
-  digitalWrite(7, 0);
-  //=================
+  // //=================
+  // pinMode(7, OUTPUT);
+  // digitalWrite(7, 1);
+  // delay(4000);
+  // digitalWrite(7, 0);
+  // //=================
 
 
   lcd.init();
@@ -127,30 +137,41 @@ void setup() {
   if (temperatura < 0 || temperatura > 100) temperatura = 20;
   if (iteraciones < 1) iteraciones = 1;
 
-   Serial.println(F("Inicializando tarjeta SD..."));
-   if (!SD.begin(chipSelect)) {
-     Serial.println(F("Error: Fallo al inicializar la SD."));
-     lcd.clear();
-     lcd.setCursor(0, 0);
-     lcd.print(F("Fallo SD!"));
-     while (true)
-       ;  // Detiene el programa aquí para que veas el error
-   }
+  //  Serial.println(F("Inicializando tarjeta SD..."));
+  //  if (!SD.begin(chipSelect)) {
+  //    Serial.println(F("Error: Fallo al inicializar la SD."));
+  //    lcd.clear();
+  //    lcd.setCursor(0, 0);
+  //    lcd.print(F("Fallo SD!"));
+  //    while (true)
+  //      ;  // Detiene el programa aquí para que veas el error
+  //  }
    Serial.println(F("SD inicializada correctamente."));
    Serial.print(F("RAM libre al inicio: "));
    Serial.println(freeRam());
-//   solicitud_init();
+  solicitud_init();
 //   if (init_temp == 1 && init_c == 1) {
 //    showStartScreen();
 //  }
 //bucle para enviar comandos hasta que los esclavos respondan
-    while (!(init_temp && init_c)) {
+    while (!(sol_init_temp && sol_init_c)) {
   solicitud_init();
   unsigned long t0 = millis();
   while (millis() - t0 < 1000) {
     procesarTramaSerial();
   }
 }
+  
+  // if (temperatura == temperatura_act_EEPROM){
+  //   iniciar_caida = 0;
+  //   while (iniciar_caida != 1) {
+  //       procesarTramaSerial();
+  //       Serial.print(F("CI|"));
+  //       delay(1000);
+  //   }
+  // }
+
+
 }
 
 
@@ -161,9 +182,30 @@ void loop() {
   
   // Leer la trama completa en el Arduino
   
-    if (init_temp && init_c && !inicializacion_aux) {
+    if (sol_init_temp && sol_init_c && !inicializacion_aux) {
      showStartScreen();
     inicializacion_aux = true;
+  }
+  consultarTemperaturaCadaIntervalo();
+
+  if (sol_init_temp && sol_init_c && !inicializacion_aux) {
+     showStartScreen();
+    inicializacion_aux = true;
+  }
+
+    if (temperatura == temperatura_act_EEPROM){
+      if (init_caida_com){
+        iniciar_caida = 0;
+        while (iniciar_caida != 1) {
+            procesarTramaSerial();
+            Serial.print(F("CI|"));
+            delay(1000);
+            init_caida_com = false;
+            
+    }
+    showTestRunningScreen();
+      }
+      
   }
 }
 
@@ -173,12 +215,12 @@ void solicitud_init(){ //envio para inicializar temp y caida
    Serial.print(F("CR|"));
    delay(500);
 }
-//void sistem_init(){
+// void sistem_init(){
 //  Serial.print(F("TI|"));
 //   delay(500);
 //   Serial.print(F("CI|"));
 //   delay(500);
-//}
+// }
 void procesarTramaSerial() {
   if (Serial.available() > 0) {
     delay(10);  // Espera breve para asegurar recepción completa
@@ -188,9 +230,7 @@ void procesarTramaSerial() {
     int valor = 0;
 
     if (tramaRecibida.length() >= 5) {
-      valor = 100 * (tramaRecibida[2] - '0') +
-              10 * (tramaRecibida[3] - '0') +
-              (tramaRecibida[4] - '0');
+      valor = 100 * (tramaRecibida[2] - '0') + 10 * (tramaRecibida[3] - '0') + (tramaRecibida[4] - '0');
     }
 
     Serial.flush();  // Limpiar buffer de entrada
@@ -198,20 +238,21 @@ void procesarTramaSerial() {
     if (esclavoID == 'T') {
       switch (respuesta) {
         case 'R':
-          init_temp = true;
+          sol_init_temp = true;
           break;
-        case 'I':
-          Serial.println("respuesta 2");
-          EEPROM.put(TEMP_ADDR, valor);
+        case 'C':
+          
+          iniciar_temp = valor;
           break;
+        // case 'V':
+        //   Serial.println("respuesta 3");
+        //   break;
         case 'S':
-          Serial.println("respuesta 3");
-          break;
-        case 'F':
           Serial.println("respuesta 4");
           break;
         case 'A':
-          Serial.println("respuesta 5");
+          temperatura_act_EEPROM = valor;
+          EEPROM.put(TEMP_ACT_ADDR, temperatura_act_EEPROM);
           break;
       }
     }
@@ -219,19 +260,36 @@ void procesarTramaSerial() {
     if (esclavoID == 'C') {
       switch (respuesta) {
         case 'R':
-          init_c = true;
+          sol_init_c = true;
           break;
-        case 'I':
-          Serial.println("respuesta 2");
+        case 'C':
+          iniciar_caida = valor;
+          //Serial.println("respuesta 2");
           break;
-        case 'S':
+        case 'V':
           Serial.println("respuesta 3");
           break;
+        case 'S':
+        Serial.println("respuesta 4");
+        break;
       }
     }
   }
 }
+//----------Funcion consulta temperatura actual
+void consultarTemperaturaCadaIntervalo() {
+  unsigned long time_temp_act = millis();
 
+  if (time_temp_act - lastRequestTime_temp >= intervalo_temp_act) {
+    lastRequestTime_temp = time_temp_act;
+    procesarTramaSerial();
+    // Enviar solicitud al esclavo (por ejemplo: "T?")
+    Serial.print(F("TA|"));
+  }
+  
+
+}
+// -----------
 
 void showStartScreen() {
   lcd.clear();
@@ -418,8 +476,33 @@ void handleKey(char key) {
     case NEW_TEST_MENU:
       if (key == 'U' || key == 'D') selectedOption = (selectedOption + 1) % 2, showNewTestMenu();
       else if (key == 'N') {
-        if (selectedOption == 0) currentIteration = 1, currentState = SPHERE_POSITION_QUESTION, showTestRunningScreen();
+        
+      if (selectedOption == 0) {
+        currentIteration = 1;
+        currentState = SPHERE_POSITION_QUESTION;
+        if (temperatura == temperatura_act_EEPROM){
+          showTestRunningScreen();
+        }
+        
+        iniciar_temp = 0;
+        while (iniciar_temp != 1) {
+          procesarTramaSerial();
+          Serial.print(F("TI|"));
+          delay(1000);
+        }
+        iniciar_temp = 0;
+        while (iniciar_temp != 1) {
+          procesarTramaSerial();
+          Serial.print(F("TS0"));
+          Serial.print(temperatura);
+          Serial.print(F("|"));
+          delay(1000);
+        }
+        
+        
+      }
         else currentState = CONFIG_VARS_MENU, selectedOption = 0, showConfigVarsMenu();
+
       } else if (key == 'E') currentState = MAIN_MENU, showMainMenu();
       break;
 
@@ -456,8 +539,7 @@ void handleKey(char key) {
           EEPROM.put(TEMP_ADDR, temperatura);
           currentState = CONFIG_VARS_MENU;
           showConfigVarsMenu();
-          Serial.print("TS");
-          Serial.print(temperatura);
+          
         } else {
           lcd.setCursor(1, 3), lcd.print(F("Error: Fuera rango!"));
           delay(1500);
@@ -498,9 +580,10 @@ void handleKey(char key) {
 
     case SPHERE_POSITION_QUESTION:
       if (key == 'N' && selectedOption == 0) {
+        Serial.print(F("CS001|"));
         sphereInPosition = true;
-        Serial.print(F("SphereInPosition: "));
-        Serial.println(sphereInPosition);
+        // Serial.print(F("SphereInPosition: "));
+        // Serial.println(sphereInPosition);
         currentState = SPHERE_RELEASED;
         showSphereReleased();
       } else if (key == 'E') currentState = NEW_TEST_MENU, showNewTestMenu();
