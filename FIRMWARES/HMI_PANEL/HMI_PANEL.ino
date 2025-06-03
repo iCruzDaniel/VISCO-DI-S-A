@@ -1,3 +1,4 @@
+//-----version2
 // ====== LIB CONFIG ======
 // --- Includes ----
 #include <Wire.h>
@@ -54,8 +55,13 @@ bool inicializacion_aux = false; //saber si se ejecutó la funcion en el loop
 int iniciar_temp = 0; // variable auxiliar para establecer el inicio de la temperatura.
 int iniciar_caida = 0; // variable auxiliar para establecer el inicio de la temperatura.
 
+int cons_temp_actual = 0;
 bool init_caida_com = true;
 
+// arreglo para almacenar los tiempos de caida
+const int MAX_DATOS = 100;
+float tiempos[MAX_DATOS];
+int cantidad = 0;
 //--------------  VARIABLES CONSULTA TEMPERATURA ACTUAL -------------------
 unsigned long lastRequestTime_temp = 0;
 const unsigned long intervalo_temp_act = 2000; // tiempo entre solicitudes en ms
@@ -75,6 +81,7 @@ const int chipSelect = 10;
 // ===== Contantes =====
 const int TEMP_ADDR = 0;
 const int TEMP_ACT_ADDR = 2;
+const int TIME_CAIDA_ADDR = 3;
 const int ITER_ADDR = sizeof(byte);  // sizeof(int) a sizeof(byte)
 // ---------------------------------
 // ==============================
@@ -85,6 +92,7 @@ byte temperatura = 20;
 byte iteraciones = 1;
 byte currentIteration = 1;
 byte selectedOption = 0;
+byte time_cai_EEPROM = 0;
 // ---------------------------------
 #define MAX_INPUT_BUFFER_LEN 4  // Max 3 dígitos para temp/iter + null terminator
 char inputBuffer[MAX_INPUT_BUFFER_LEN];
@@ -137,15 +145,15 @@ void setup() {
   if (temperatura < 0 || temperatura > 100) temperatura = 20;
   if (iteraciones < 1) iteraciones = 1;
 
-  //  Serial.println(F("Inicializando tarjeta SD..."));
-  //  if (!SD.begin(chipSelect)) {
-  //    Serial.println(F("Error: Fallo al inicializar la SD."));
-  //    lcd.clear();
-  //    lcd.setCursor(0, 0);
-  //    lcd.print(F("Fallo SD!"));
-  //    while (true)
-  //      ;  // Detiene el programa aquí para que veas el error
-  //  }
+   Serial.println(F("Inicializando tarjeta SD..."));
+   if (!SD.begin(chipSelect)) {
+     Serial.println(F("Error: Fallo al inicializar la SD."));
+     lcd.clear();
+     lcd.setCursor(0, 0);
+     lcd.print(F("Fallo SD!"));
+     while (true)
+       ;  // Detiene el programa aquí para que veas el error
+   }
    Serial.println(F("SD inicializada correctamente."));
    Serial.print(F("RAM libre al inicio: "));
    Serial.println(freeRam());
@@ -177,7 +185,7 @@ void setup() {
 
 void loop() {
   char key = keypad.getKey();
-  if (key) handleKey(key);
+  if (key) handleKey (key);
   procesarTramaSerial();
   
   // Leer la trama completa en el Arduino
@@ -186,7 +194,7 @@ void loop() {
      showStartScreen();
     inicializacion_aux = true;
   }
-  consultarTemperaturaCadaIntervalo();
+  
 
   if (sol_init_temp && sol_init_c && !inicializacion_aux) {
      showStartScreen();
@@ -207,6 +215,14 @@ void loop() {
       }
       
   }
+}
+// MOSTRAR VECTOR DE TIEMPO
+void mostrarVector() {
+  for (int i = 0; i < cantidad; i++) {
+    Serial.print(tiempos[i], 2);  // Mostrar con 2 decimales
+    Serial.print(",");            // Separador: puedes usar "," o "\t"
+  }
+  Serial.println();  // Salto de línea al final
 }
 
 void solicitud_init(){ //envio para inicializar temp y caida
@@ -251,7 +267,8 @@ void procesarTramaSerial() {
           Serial.println("respuesta 4");
           break;
         case 'A':
-          temperatura_act_EEPROM = valor;
+          // temperatura_act_EEPROM = valor;
+          cons_temp_actual = valor;
           EEPROM.put(TEMP_ACT_ADDR, temperatura_act_EEPROM);
           break;
       }
@@ -267,7 +284,16 @@ void procesarTramaSerial() {
           //Serial.println("respuesta 2");
           break;
         case 'V':
-          Serial.println("respuesta 3");
+          // time_cai_EEPROM = valor;
+          // EEPROM.put(TIME_CAIDA_ADDR, time_cai_EEPROM);
+          // saveDataToSD();
+          if (cantidad < MAX_DATOS) {
+            tiempos[cantidad] = valor;
+            cantidad++;
+          } else {
+            Serial.println("Vector lleno");
+          }
+          //Serial.println("respuesta 3");
           break;
         case 'S':
         Serial.println("respuesta 4");
@@ -277,18 +303,19 @@ void procesarTramaSerial() {
   }
 }
 //----------Funcion consulta temperatura actual
-void consultarTemperaturaCadaIntervalo() {
-  unsigned long time_temp_act = millis();
+// void consultarTemperaturaCadaIntervalo() {
+//   unsigned long time_temp_act = millis();
 
-  if (time_temp_act - lastRequestTime_temp >= intervalo_temp_act) {
-    lastRequestTime_temp = time_temp_act;
-    procesarTramaSerial();
-    // Enviar solicitud al esclavo (por ejemplo: "T?")
-    Serial.print(F("TA|"));
-  }
+//   if (time_temp_act - lastRequestTime_temp >= intervalo_temp_act) {
+//     lastRequestTime_temp = time_temp_act;
+//     procesarTramaSerial();
+//     // Enviar solicitud al esclavo (TA)
+//     Serial.print(F("TA|"));
+//   }
+//   cons_temp_actual = 1;
   
 
-}
+// }
 // -----------
 
 void showStartScreen() {
@@ -430,17 +457,25 @@ void saveDataToSD() {
   Serial.print(F("RAM libre antes de abrir archivo SD: "));
   Serial.println(freeRam());
 
-  file = SD.open("data.txt", FILE_WRITE);
+  file = SD.open("datosx.txt", FILE_WRITE);
 
   if (file) {
     Serial.print(F("RAM libre despues de abrir y antes de escribir SD: "));
     Serial.println(freeRam());
 
-    file.print(F("Temperatura: "));
-    file.println(temperatura);
-    file.print(F("Iteraciones: "));
-    file.println(iteraciones);
-    file.println(F("------"));
+      for (int i = 0; i < cantidad; i++) {
+        file.println(temperatura);
+        file.print(F(","));
+        file.println(tiempos[i]);  // Mostrar con 2 decimales
+                  // Separador: puedes usar "," o "\t"
+    }
+    file.println();  // Salto de línea al final
+  
+    // file.print(F("Temperatura: "));
+    // file.println(temperatura);
+    // file.print(F("Tiempo de Caida: "));
+    // file.println(time_cai_EEPROM);
+    // file.println(F("------"));
     file.close();
 
     Serial.print(F("RAM libre despues de cerrar archivo SD: "));
@@ -459,8 +494,8 @@ void saveDataToSD() {
     Serial.println(freeRam());
   }
 
-  currentState = MAIN_MENU;
-  showMainMenu();
+   currentState = MAIN_MENU;
+   showMainMenu();
 }
 
 void handleKey(char key) {
@@ -469,6 +504,10 @@ void handleKey(char key) {
     case MAIN_MENU:
       if (key == 'U' || key == 'D') selectedOption = (selectedOption + 1) % 2, showMainMenu();
       else if (key == 'N') {
+        Serial.print(F("TA"));
+        Serial.print(F("|"));
+        delay(1000);
+        procesarTramaSerial();
         if (selectedOption == 0) currentState = NEW_TEST_MENU, selectedOption = 0, showNewTestMenu();
       }
       break;
@@ -476,6 +515,7 @@ void handleKey(char key) {
     case NEW_TEST_MENU:
       if (key == 'U' || key == 'D') selectedOption = (selectedOption + 1) % 2, showNewTestMenu();
       else if (key == 'N') {
+        
         
       if (selectedOption == 0) {
         currentIteration = 1;
@@ -498,8 +538,18 @@ void handleKey(char key) {
           Serial.print(F("|"));
           delay(1000);
         }
+        iniciar_temp = 0;
+        //AQUI COLOCAR CONSULTAR TEMP_ACT
+         
+        while (cons_temp_actual != temperatura) {
+          procesarTramaSerial();
+          Serial.print(F("TA"));
+          Serial.print(F("|"));
+          delay(1000);
+        }
+        showTestRunningScreen();
         
-        
+        // Serial.print(F("-tc-"));
       }
         else currentState = CONFIG_VARS_MENU, selectedOption = 0, showConfigVarsMenu();
 
@@ -581,7 +631,9 @@ void handleKey(char key) {
     case SPHERE_POSITION_QUESTION:
       if (key == 'N' && selectedOption == 0) {
         Serial.print(F("CS001|"));
+        delay (500);
         sphereInPosition = true;
+        
         // Serial.print(F("SphereInPosition: "));
         // Serial.println(sphereInPosition);
         currentState = SPHERE_RELEASED;
@@ -592,12 +644,14 @@ void handleKey(char key) {
     case SAVE_DATA_QUESTION:
       if (key == 'U' || key == 'D') selectedOption = (selectedOption + 1) % 2, showSaveDataQuestion();
       else if (key == 'N') {
-        if (selectedOption == 0) saveDataToSD();
+        if (selectedOption == 0) saveDataToSD(); 
         else {
           currentState = MAIN_MENU;
           showMainMenu();
         }
       }
+      iniciar_temp = 0;
+      mostrarVector();
       break;
   }
 }
