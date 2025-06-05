@@ -40,7 +40,8 @@ float D_C[] = { -1, 0, 1, 'T' };
 // Derivada Positiva (calentándose rápido)
 float D_P[] = { 0.5, 2, 5, 5, 'R' };  
 
-// ===Conjuntos para Potencia=== ///   
+// ===Conjuntos para Potencia=== ///
+// Potencia Máxima (100% PWM)
 // Potencia Alta (70-100%)
 float P_A[] = { 60, 85, 100, 'T' };           
 // Potencia Media (40-70%)
@@ -96,13 +97,14 @@ void loop() {
       mensaje = tramaRecibida[1];
       valor = 100 * (tramaRecibida[2] - '0') + 10 * (tramaRecibida[3] - '0') + (tramaRecibida[4] - '0');
 
-      Serial.flush();  //Limpiar buffer de entrada
+      // Bandera para indicar que se está procesando un comando
+      static bool comandoActivo = false;
     }
 
     switch (mensaje) {
       case 'R':  // Inicializar
         leerSensor();
-        Serial.println(F("Control listo"));
+        Serial.println("Control listo");
         break;
 
       case 'I':  // Iniciar control
@@ -128,11 +130,11 @@ void loop() {
       case 'F':  // Finalizar control
         controlActivo = false;
         aplicarPotencia(0);  // Apagar actuador
-        Serial.println(F("Control finalizado y potencia desactivada"));
+        Serial.println("Control finalizado y potencia desactivada");
         break;
 
       case 'A':  // Solicitar valor actual
-        Serial.print(F("Potencia actual: "));
+        Serial.print("Potencia actual: ");
         Serial.print(setPoint);
         Serial.println(potencia);
         break;
@@ -152,18 +154,26 @@ void loop() {
     tempTruncada = leerSensor();  // Lectura real del sensor
 
     error = (float)setPoint - tempTruncada;
+    if (abs(error) > 20) { // Margen mayor que el rango de operación
+      Serial.print("ERROR CRÍTICO: Diferenica temperatura ");
+      Serial.print(abs(error));
+      Serial.println("°C excede límites del sistema");
+      aplicarPotencia(0);
+      controlActivo = false;
+      return;
+    }
     derivada = (error - errorAnterior) / dt; // Derivada normalizada
     errorAnterior = error;
 
     potencia = calcularPotencia(error, derivada);
     aplicarPotencia(potencia);  // Control de actuador real
 
-    Serial.print(F("Temp: ")); Serial.print(tempTruncada, 2);
-    Serial.print(F(" | Error: ")); Serial.print(error, 2);
-    Serial.print(F(" | Derivada: ")); Serial.print(derivada, 2);
-    Serial.print(F(" | Potencia: ")); Serial.print(potencia, 2);
-    Serial.print(F("% | Modo: ")); Serial.print(error > 0 ? F("CALENTAR") : F("ENFRIAR"));
-    Serial.print(F(" | PWM: ")); Serial.println(map(abs(potencia), 0, 100, 0, 255));    
+    Serial.print("Temp: "); Serial.print(tempTruncada, 2);
+    Serial.print(" | Error: "); Serial.print(error, 2);
+    Serial.print(" | Derivada: "); Serial.print(derivada, 2);
+    Serial.print(" | Potencia: "); Serial.print(potencia, 2);
+    Serial.print("% | Modo: "); Serial.print(error > 0 ? "CALENTAR" : "ENFRIAR");
+    Serial.print(" | PWM: "); Serial.println(map(abs(potencia), 0, 100, 0, 255));    
 
     delay(200); // Pequeño delay para estabilidad
   }
