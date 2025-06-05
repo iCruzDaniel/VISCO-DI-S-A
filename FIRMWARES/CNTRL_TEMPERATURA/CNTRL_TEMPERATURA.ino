@@ -40,11 +40,9 @@ float D_C[] = { -1, 0, 1, 'T' };
 // Derivada Positiva (calentándose rápido)
 float D_P[] = { 0.5, 2, 5, 5, 'R' };  
 
-// ===Conjuntos para Potencia=== ///
-// Potencia Máxima (100% PWM)
-float P_M[] = { 80, 90, 100, 100, 'R' };     
-// Potencia Alta (70-90%)
-float P_A[] = { 60, 75, 85, 'T' };           
+// ===Conjuntos para Potencia=== ///   
+// Potencia Alta (70-100%)
+float P_A[] = { 60, 85, 100, 'T' };           
 // Potencia Media (40-70%)
 float P_MD[] = { 30, 50, 70, 'T' };          
 // Potencia Baja (10-40%)
@@ -176,11 +174,11 @@ float calcularPotencia(float error, float derivada) {
   float B[tam];
   controlfuzzy.inicio(B, tam);
 
-  controlfuzzy.regla_compuesta2(E_NG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_M, POTENCIA_RANGE, B, tam);  // Regla 1
+  controlfuzzy.regla_compuesta2(E_NG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);  // Regla 1
   controlfuzzy.regla_compuesta2(E_NP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);  // Regla 2
   controlfuzzy.regla_compuesta2(E_C, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_MD, POTENCIA_RANGE, B, tam);    // Regla 3
   controlfuzzy.regla_compuesta2(E_PP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 4
-  controlfuzzy.regla_compuesta2(E_PG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_M, POTENCIA_RANGE, B, tam);   // Regla 5
+  controlfuzzy.regla_compuesta2(E_PG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);   // Regla 5
   
   controlfuzzy.regla_compuesta2(E_NG, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);    // Regla 6
   controlfuzzy.regla_compuesta2(E_NP, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 7
