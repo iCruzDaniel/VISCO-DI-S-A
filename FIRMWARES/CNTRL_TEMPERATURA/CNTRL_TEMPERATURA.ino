@@ -41,7 +41,6 @@ float D_C[] = { -1, 0, 1, 'T' };
 float D_P[] = { 0.5, 2, 5, 5, 'R' };  
 
 // ===Conjuntos para Potencia=== ///
-// Potencia Máxima (100% PWM)
 // Potencia Alta (70-100%)
 float P_A[] = { 60, 85, 100, 'T' };           
 // Potencia Media (40-70%)
@@ -66,8 +65,8 @@ bool setPointInicialLeido = false;
 bool nuevoSetPointLeido = false;
 
 //=== Verificacion del SetPoint === //
-const int MIN_SETPOINT = 25;
-const int MAX_SETPOINT = 40;
+const int MIN_SETPOINT = 22;
+const int MAX_SETPOINT = 42;
 
 enum EstadosSistema { INICIO, LISTO, FALLO, CONTROL_ACTIVO };
 EstadosSistema estadoSistema = INICIO;
@@ -75,15 +74,16 @@ EstadosSistema estadoSistema = INICIO;
 // ========= PIN CONFIG =============
 // Pines para sensor y actuador
 const int pinPWM = 9;     // Pin PWM para potencia
-const int pinDIR = 8;      // Pin de dirección del puente H
+const int pinDIR = 6;      // Pin de dirección del puente H
 const int RELE_MOTOBOMBA = 4;    // Pin para el relé de la motobomba
-const int RELE_VENTILADORES = 5;  // Pin para el relé de los ventiladores
+const int RELE_VENTILADORES = 3;  // Pin para el relé de los ventiladores
 Adafruit_MAX31865 max = Adafruit_MAX31865(10, 11, 12, 13);  // sensor temperatura
 pt100rtd PT100 = pt100rtd();
 
 // ===== MAIN =====
 void setup() {
   Serial.begin(9600);
+
   pinMode(pinPWM, OUTPUT);
   pinMode(pinDIR, OUTPUT);
   pinMode(RELE_MOTOBOMBA, OUTPUT);
@@ -94,6 +94,7 @@ void setup() {
   // Inicialmente apagado
   digitalWrite(pinDIR, LOW);
   analogWrite(pinPWM, 0);
+  
   apagarDispositivos(); 
 
 }
@@ -278,7 +279,7 @@ bool validarSetpoint(int sp) {
 }
 void mostrarAyudaSetpoint() {
   Serial.println(F("\n=== AYUDA ==="));
-  Serial.println(F("El setpoint debe estar entre 25 y 40°C"));
+  Serial.println(F("El setpoint debe estar entre 22 y 42°C"));
   Serial.println(F("Ejemplo válido: T S 30| (para 30°C)"));
   Serial.println(F("Formato: T S XX| (XX = valor 2 dígitos)"));
 }
