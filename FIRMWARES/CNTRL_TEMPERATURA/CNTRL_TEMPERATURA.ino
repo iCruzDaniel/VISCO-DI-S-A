@@ -104,7 +104,7 @@ void loop() {
     switch (mensaje) {
       case 'R':  // Inicializar
         leerSensor();
-        Serial.println("Control listo");
+        Serial.println(F("Control listo"));
         break;
 
       case 'I':  // Iniciar control
@@ -130,11 +130,11 @@ void loop() {
       case 'F':  // Finalizar control
         controlActivo = false;
         aplicarPotencia(0);  // Apagar actuador
-        Serial.println("Control finalizado y potencia desactivada");
+        Serial.println(F("Control finalizado y potencia desactivada"));
         break;
 
       case 'A':  // Solicitar valor actual
-        Serial.print("Potencia actual: ");
+        Serial.print(F("Potencia actual: "));
         Serial.print(setPoint);
         Serial.println(potencia);
         break;
@@ -160,12 +160,12 @@ void loop() {
     potencia = calcularPotencia(error, derivada);
     aplicarPotencia(potencia);  // Control de actuador real
 
-    Serial.print("Temp: "); Serial.print(tempTruncada, 2);
-    Serial.print(" | Error: "); Serial.print(error, 2);
-    Serial.print(" | Derivada: "); Serial.print(derivada, 2);
-    Serial.print(" | Potencia: "); Serial.print(potencia, 2);
-    Serial.print("% | Modo: "); Serial.print(error > 0 ? "CALENTAR" : "ENFRIAR");
-    Serial.print(" | PWM: "); Serial.println(map(abs(potencia), 0, 100, 0, 255));    
+    Serial.print(F("Temp: ")); Serial.print(tempTruncada, 2);
+    Serial.print(F(" | Error: ")); Serial.print(error, 2);
+    Serial.print(F(" | Derivada: ")); Serial.print(derivada, 2);
+    Serial.print(F(" | Potencia: ")); Serial.print(potencia, 2);
+    Serial.print(F("% | Modo: ")); Serial.print(error > 0 ? F("CALENTAR") : F("ENFRIAR"));
+    Serial.print(F(" | PWM: ")); Serial.println(map(abs(potencia), 0, 100, 0, 255));    
 
     delay(200); // Pequeño delay para estabilidad
   }
