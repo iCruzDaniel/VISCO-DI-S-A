@@ -95,7 +95,7 @@ void loop() {
 
     if (tramaRecibida[0] == ID) {
       mensaje = tramaRecibida[1];
-      valor = 100 * (tramaRecibida[2] - '0') + 10 * (tramaRecibida[3] - '0') + (tramaRecibida[4] - '0');
+      valor = tramaRecibida.substring(2).toInt();
 
       // Bandera para indicar que se está procesando un comando
       static bool comandoActivo = false;
