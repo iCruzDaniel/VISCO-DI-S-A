@@ -221,3 +221,5 @@ void aplicarPotencia(float potencia) {
   int pwm = map(abs(potencia), 0, 100, 0, 255);
   analogWrite(pinPWM, pwm);
 }
+
+//fdfd
