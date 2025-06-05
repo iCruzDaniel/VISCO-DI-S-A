@@ -105,6 +105,7 @@ void loop() {
       case 'R':  // Inicializar
         leerSensor();
         Serial.println(F("Control listo"));
+        Serial.println(F(" TR|"));
         break;
 
       case 'I':  // Iniciar control
