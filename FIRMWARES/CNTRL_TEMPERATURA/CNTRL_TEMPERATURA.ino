@@ -16,21 +16,21 @@ String tramaRecibida;
 // ===== CONTROL DIFUSO ======
 fuzzy controlfuzzy;
 
-float ERROR_RANGE[] = { -20, 20 };
+float ERROR_RANGE[] = { -15, 15 };  //rango de error
 float DERIVADA_RANGE[] = { -5, 5 };
 float POTENCIA_RANGE[] = { 0, 100 };
 
 // ===Conjuntos difusos para Error=== ///
 // Error Negativo Grande (calor extremo - necesitamos enfriar)
-float E_NG[] = { -20, -20, -15, -10, 'R' };  
+float E_NG[] = { -15, -15, -10, -5, 'R' }; 
 // Error Negativo Pequeño (calor moderado - enfriar suave)
-float E_NP[] = { -12, -8, -4, 'T' };         
+float E_NP[] = { -8, -5, -2, 'T' };
 // Error Cero (en setpoint)
-float E_C[] = { -2, 0, 2, 'T' };             
+float E_C[] = { -2, 0, 2, 'T' };           
 // Error Positivo Pequeño (frío moderado - calentar suave)
-float E_PP[] = { 4, 8, 12, 'T' };            
+float E_PP[] = { 2, 5, 8, 'T' };       
 // Error Positivo Grande (frío extremo - calentar fuerte)
-float E_PG[] = { 10, 15, 20, 20, 'R' };   
+float E_PG[] = { 5, 10, 15, 15, 'R' };  
 
 // ===Conjuntos para Derivada=== ///
 // Derivada Negativa (enfriándose rápido)
@@ -65,6 +65,9 @@ float Tlut;
 int setPoint = 0;  // SetPoint original
 bool setPointInicialLeido = false;
 bool nuevoSetPointLeido = false;
+
+const int MIN_SETPOINT = 25;
+const int MAX_SETPOINT = 40;
 
 // ========= PIN CONFIG =============
 // Pines para sensor y actuador
@@ -106,19 +109,23 @@ void loop() {
 
       case 'I':  // Iniciar control
         if (!setPointInicialLeido) {
-          Serial.println(F("No se ha definido el SetPoint. Usa el comando 'S' primero."));
+          Serial.println(F("Error: No se ha definido el SetPoint"));
+        } else if (!validarSetpoint(setPoint)) {
+          Serial.println(F("Error: Setpoint fuera de rango"));
         } else {
-          Serial.println(F("Control iniciado con lógica difusa."));
+          Serial.println(F("Control iniciado"));
           controlActivo = true;
         }
         break;
 
       case 'S':  // Cambiar SetPoint
-        setPoint = valor;
-        setPointInicialLeido = true;
-        Serial.print(F("Setpoint actual: "));
-        Serial.println(setPoint);
-        break;
+        if (validarSetpoint(valor)) {
+          setPoint = valor;
+          setPointInicialLeido = true;
+          Serial.print(F("Setpoint actualizado: "));
+          Serial.println(setPoint);
+        }
+       break;
 
       case 'F':  // Finalizar control
         controlActivo = false;
@@ -169,18 +176,23 @@ float calcularPotencia(float error, float derivada) {
   float B[tam];
   controlfuzzy.inicio(B, tam);
 
-  // Reglas para CALENTAR (error positivo)
-  controlfuzzy.regla_simple(E_PG, ERROR_RANGE, error, P_M, POTENCIA_RANGE, B, tam);
-  controlfuzzy.regla_compuesta2(E_PP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);
-  controlfuzzy.regla_compuesta2(E_PP, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_MD, POTENCIA_RANGE, B, tam);
-
-  // Reglas para ENFRIAR (error negativo)
-  controlfuzzy.regla_simple(E_NG, ERROR_RANGE, error, P_M, POTENCIA_RANGE, B, tam);
-  controlfuzzy.regla_compuesta2(E_NP, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);
-  controlfuzzy.regla_compuesta2(E_NP, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_MD, POTENCIA_RANGE, B, tam);
-
-  // Reglas para error CERO (estabilidad)
-  controlfuzzy.regla_compuesta2(E_C, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);
+  controlfuzzy.regla_compuesta2(E_NG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_M, POTENCIA_RANGE, B, tam);  // Regla 1
+  controlfuzzy.regla_compuesta2(E_NP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);  // Regla 2
+  controlfuzzy.regla_compuesta2(E_C, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_MD, POTENCIA_RANGE, B, tam);    // Regla 3
+  controlfuzzy.regla_compuesta2(E_PP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 4
+  controlfuzzy.regla_compuesta2(E_PG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_M, POTENCIA_RANGE, B, tam);   // Regla 5
+  
+  controlfuzzy.regla_compuesta2(E_NG, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);    // Regla 6
+  controlfuzzy.regla_compuesta2(E_NP, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 7
+  controlfuzzy.regla_compuesta2(E_C, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_AP, POTENCIA_RANGE, B, tam);  // Regla 8
+  controlfuzzy.regla_compuesta2(E_PP, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 9
+  controlfuzzy.regla_compuesta2(E_PG, D_C, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 10
+  
+  controlfuzzy.regla_compuesta2(E_NG, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 11
+  controlfuzzy.regla_compuesta2(E_NP, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 12
+  controlfuzzy.regla_compuesta2(E_C, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 13
+  controlfuzzy.regla_compuesta2(E_PP, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);  // Regla 14
+  controlfuzzy.regla_compuesta2(E_PG, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);  // Regla 15
 
   return controlfuzzy.defusi(B, POTENCIA_RANGE, tam);
 }
@@ -222,4 +234,17 @@ void aplicarPotencia(float potencia) {
   analogWrite(pinPWM, pwm);
 }
 
-//fdfd
+// Función de validación
+bool validarSetpoint(int sp) {
+  if (sp >= MIN_SETPOINT && sp <= MAX_SETPOINT) {
+    return true;
+  }
+  mostrarAyudaSetpoint();
+  return false;
+}
+void mostrarAyudaSetpoint() {
+  Serial.println(F("\n=== AYUDA ==="));
+  Serial.println(F("El setpoint debe estar entre 25 y 40°C"));
+  Serial.println(F("Ejemplo válido: T S 30| (para 30°C)"));
+  Serial.println(F("Formato: T S XXX| (XXX = valor 3 dígitos)"));
+}
