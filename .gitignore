@@ -1,5 +1,9 @@
+.vscode/
+
 /HMI/Visualizer/my-venv
 /HMI/Visualizer/vistas/__pycache__
 Visualizer.spec
-build
-dist
+/HMI/Visualizer/build
+/HMI/Visualizer/dist
+
+*.cfg
