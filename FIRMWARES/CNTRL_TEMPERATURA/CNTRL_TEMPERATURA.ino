@@ -65,13 +65,19 @@ int setPoint = 0;  // SetPoint original
 bool setPointInicialLeido = false;
 bool nuevoSetPointLeido = false;
 
+//=== Verificacion del SetPoint === //
 const int MIN_SETPOINT = 25;
 const int MAX_SETPOINT = 40;
+
+enum EstadosSistema { INICIO, LISTO, FALLO, CONTROL_ACTIVO };
+EstadosSistema estadoSistema = INICIO;
 
 // ========= PIN CONFIG =============
 // Pines para sensor y actuador
 const int pinPWM = 9;     // Pin PWM para potencia
 const int pinDIR = 8;      // Pin de dirección del puente H
+const int RELE_MOTOBOMBA = 4;    // Pin para el relé de la motobomba
+const int RELE_VENTILADORES = 5;  // Pin para el relé de los ventiladores
 Adafruit_MAX31865 max = Adafruit_MAX31865(10, 11, 12, 13);  // sensor temperatura
 pt100rtd PT100 = pt100rtd();
 
@@ -80,11 +86,16 @@ void setup() {
   Serial.begin(9600);
   pinMode(pinPWM, OUTPUT);
   pinMode(pinDIR, OUTPUT);
+  pinMode(RELE_MOTOBOMBA, OUTPUT);
+  pinMode(RELE_VENTILADORES, OUTPUT);
+
   max.begin(MAX31865_3WIRE);
-  
+ 
   // Inicialmente apagado
   digitalWrite(pinDIR, LOW);
   analogWrite(pinPWM, 0);
+  apagarDispositivos(); 
+
 }
 
 void loop() {
@@ -103,19 +114,31 @@ void loop() {
 
     switch (mensaje) {
       case 'R':  // Inicializar
-        leerSensor();
-        Serial.println(F("Control listo"));
+        Serial.println(F("Iniciando verificación de componentes..."));
+        
+        if (verificarComponentes()) {
+          Serial.println(F("OK: Todos los componentes funcionando"));
+          Serial.println(F("Sistema listo para iniciar control"));
+          estadoSistema = LISTO;
+        } else {
+          Serial.println(F("ERROR: Corregir fallos antes de continuar"));
+          estadoSistema = FALLO;
+        }
+
         Serial.println(F(" TR|"));
-        break;
+       break;
 
       case 'I':  // Iniciar control
-        if (!setPointInicialLeido) {
-          Serial.println(F("Error: No se ha definido el SetPoint"));
+        if (estadoSistema != LISTO) {
+          Serial.println(F("ERROR: Ejecutar verificación (comando R) primero"));
+        } else if (!setPointInicialLeido) {
+          Serial.println(F("ERROR: Definir setpoint primero (comando S)"));
         } else if (!validarSetpoint(setPoint)) {
-          Serial.println(F("Error: Setpoint fuera de rango"));
+          Serial.println(F("ERROR: Setpoint fuera de rango"));
         } else {
-          Serial.println(F("Control iniciado"));
           controlActivo = true;
+          activarDispositivos(); 
+          Serial.println(F("Control difuso iniciado correctamente"));
         }
         break;
 
@@ -131,11 +154,12 @@ void loop() {
       case 'F':  // Finalizar control
         controlActivo = false;
         aplicarPotencia(0);  // Apagar actuador
-        Serial.println("Control finalizado y potencia desactivada");
+          apagarDispositivos(); 
+        Serial.println(F("Control finalizado"));
         break;
 
       case 'A':  // Solicitar valor actual
-        Serial.print("Potencia actual: ");
+        Serial.print(F("Potencia actual: "));
         Serial.print(setPoint);
         Serial.println(potencia);
         break;
@@ -155,6 +179,7 @@ void loop() {
     tempTruncada = leerSensor();  // Lectura real del sensor
 
     error = (float)setPoint - tempTruncada;
+
     if (abs(error) > 20) { // Margen mayor que el rango de operación
       Serial.print(F("ERROR CRÍTICO: Diferenica temperatura "));
       Serial.print(abs(error));
@@ -167,7 +192,7 @@ void loop() {
     errorAnterior = error;
 
     potencia = calcularPotencia(error, derivada);
-    aplicarPotencia(potencia);  // Control de actuador real
+    aplicarPotencia(potencia);  // Control deL actuador 
 
     Serial.print(F("Temp: ")); Serial.print(tempTruncada, 2);
     Serial.print(F(" | Error: ")); Serial.print(error, 2);
@@ -176,7 +201,7 @@ void loop() {
     Serial.print(F("% | Modo: ")); Serial.print(error > 0 ? "CALENTAR" : "ENFRIAR");
     Serial.print(F(" | PWM: ")); Serial.println(map(abs(potencia), 0, 100, 0, 255));    
 
-    delay(200); // Pequeño delay para estabilidad
+    delay(200); // delay para estabilidad
   }
 }
 
@@ -187,7 +212,7 @@ float calcularPotencia(float error, float derivada) {
 
   controlfuzzy.regla_compuesta2(E_NG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);  // Regla 1
   controlfuzzy.regla_compuesta2(E_NP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);  // Regla 2
-  controlfuzzy.regla_compuesta2(E_C, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_MD, POTENCIA_RANGE, B, tam);    // Regla 3
+  controlfuzzy.regla_compuesta2(E_C, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_AP, POTENCIA_RANGE, B, tam);    // Regla 3
   controlfuzzy.regla_compuesta2(E_PP, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 4
   controlfuzzy.regla_compuesta2(E_PG, D_N, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_A, POTENCIA_RANGE, B, tam);   // Regla 5
   
@@ -199,14 +224,14 @@ float calcularPotencia(float error, float derivada) {
   
   controlfuzzy.regla_compuesta2(E_NG, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 11
   controlfuzzy.regla_compuesta2(E_NP, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 12
-  controlfuzzy.regla_compuesta2(E_C, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);   // Regla 13
+  controlfuzzy.regla_compuesta2(E_C, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_AP, POTENCIA_RANGE, B, tam);   // Regla 13
   controlfuzzy.regla_compuesta2(E_PP, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);  // Regla 14
   controlfuzzy.regla_compuesta2(E_PG, D_P, ERROR_RANGE, DERIVADA_RANGE, error, derivada, P_B, POTENCIA_RANGE, B, tam);  // Regla 15
 
   return controlfuzzy.defusi(B, POTENCIA_RANGE, tam);
 }
 
-// Lectura real del sensor
+// Lectura sensor Temp
 float leerSensor() {
   uint16_t rtd, ohmsx100;
   uint32_t dummy;
@@ -255,5 +280,35 @@ void mostrarAyudaSetpoint() {
   Serial.println(F("\n=== AYUDA ==="));
   Serial.println(F("El setpoint debe estar entre 25 y 40°C"));
   Serial.println(F("Ejemplo válido: T S 30| (para 30°C)"));
-  Serial.println(F("Formato: T S XXX| (XXX = valor 3 dígitos)"));
+  Serial.println(F("Formato: T S XX| (XX = valor 2 dígitos)"));
+}
+bool verificarComponentes() {
+  bool todosOK = true;
+  
+  // 1. Verificar sensor MAX31865
+  if (!max.begin(MAX31865_3WIRE)) {
+    Serial.println(F("ERROR: Sensor MAX31865 no responde"));
+    todosOK = false;
+  } else {
+    // Lectura de prueba
+    uint16_t rtd = max.readRTD();
+    if (rtd == 0 || rtd == 0xFFFF) {
+      Serial.println(F("ERROR: Lectura inválida del sensor"));
+      todosOK = false;
+    }
+  }
+  return todosOK;
+}
+
+void activarDispositivos() {
+  digitalWrite(RELE_MOTOBOMBA, LOW);     // Activación motobomba (LOW para relés activos por bajo)
+  digitalWrite(RELE_VENTILADORES, LOW);  // Activación ventiladores
+  Serial.println(F("Dispositivos activados"));
+  delay(1500);
+}
+
+void apagarDispositivos() {
+  digitalWrite(RELE_MOTOBOMBA, HIGH);    // Desactivación motobomba
+  digitalWrite(RELE_VENTILADORES, HIGH); // Desactivación ventiladores
+  Serial.println(F("Dispositivos apagados"));
 }
